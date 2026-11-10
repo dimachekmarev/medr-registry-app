@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+<title>Регистр прободных язв</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #f4f6f8);
+    --text: var(--tg-theme-text-color, #1a1d21);
+    --hint: var(--tg-theme-hint-color, #6b7280);
+    --link: var(--tg-theme-link-color, #0d6efd);
+    --btn: var(--tg-theme-button-color, #0d6efd);
+    --btn-text: var(--tg-theme-button-text-color, #fff);
+    --sec: var(--tg-theme-secondary-bg-color, #ffffff);
+    --line: #e5e7eb;
+    --head: #0f172a;
+    --row-hover: #eef4ff;
+    --accent: #0d9488;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  header.app {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--sec); border-bottom: 1px solid var(--line);
+    padding: 12px 16px 10px; display: flex; flex-direction: column; gap: 8px;
+  }
+  header.app h1 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
+  header.app .sub { color: var(--hint); font-size: 12px; }
+  .toolbar { display: flex; gap: 8px; align-items: center; }
+  .toolbar input {
+    flex: 1; min-width: 0; height: 40px; border: 1px solid var(--line); border-radius: 10px;
+    padding: 0 12px; font-size: 15px; background: var(--bg); color: var(--text); outline: none;
+  }
+  .toolbar input:focus { border-color: var(--btn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--btn) 20%, transparent); }
+  button.dl, button.back {
+    height: 40px; border: 0; border-radius: 10px; padding: 0 14px; font-weight: 600; font-size: 13px;
+    background: var(--btn); color: var(--btn-text); cursor: pointer; white-space: nowrap;
+  }
+  button.back { background: var(--bg); color: var(--text); border: 1px solid var(--line); }
+  .wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { border-collapse: separate; border-spacing: 0; min-width: 2200px; width: max-content; background: var(--sec); }
+  thead th {
+    position: sticky; top: 0; z-index: 5;
+    background: var(--head); color: #fff; font-size: 11px; font-weight: 600;
+    text-align: left; padding: 10px 10px; white-space: nowrap; border-right: 1px solid #1f2937;
+  }
+  tbody td {
+    padding: 8px 10px; border-bottom: 1px solid var(--line); border-right: 1px solid #f0f2f5;
+    white-space: nowrap; max-width: 280px; overflow: hidden; text-overflow: ellipsis; font-size: 13px;
+  }
+  tbody tr { cursor: pointer; }
+  tbody tr:nth-child(even) { background: #fafbfc; }
+  tbody tr:hover { background: var(--row-hover); }
+  th.sticky, td.sticky {
+    position: sticky; left: 0; z-index: 4; background: inherit;
+    box-shadow: 4px 0 8px rgba(15,23,42,.06); font-weight: 700; color: #0f172a;
+  }
+  thead th.sticky { z-index: 6; background: var(--head); color: #fff; }
+  tbody tr:nth-child(even) td.sticky { background: #fafbfc; }
+  tbody tr:hover td.sticky { background: var(--row-hover); }
+  .status { padding: 24px 16px; color: var(--hint); text-align: center; }
+  .status.error { color: #b91c1c; }
+  .sheet {
+    display: none; position: fixed; inset: 0; z-index: 30; background: var(--bg);
+    overflow: auto;
+  }
+  .sheet.open { display: block; }
+  .sheet .inner { padding: 12px 16px 32px; }
+  .sheet h2 { margin: 0 0 4px; font-size: 20px; }
+  .kv { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; margin-top: 14px; }
+  .kv .k { color: var(--hint); font-size: 12px; padding-top: 6px; }
+  .kv .v { background: var(--sec); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 14px; word-break: break-word; white-space: pre-wrap; }
+  .empty { color: #9ca3af; }
+</style>
+</head>
+<body>
+<header class="app">
+  <div>
+    <h1>Регистр прободных язв</h1>
+    <div class="sub" id="meta">Загрузка…</div>
+  </div>
+  <div class="toolbar">
+    <input id="q" type="search" placeholder="Поиск по коду пациента, например 4-2026" autocomplete="off"/>
+    <button class="dl" id="dl" type="button">Скачать Excel</button>
+  </div>
+</header>
+<div id="status" class="status">Загрузка реестра…</div>
+<div class="wrap" id="wrap" hidden>
+  <table>
+    <thead><tr id="head"></tr></thead>
+    <tbody id="body"></tbody>
+  </table>
+</div>
+<section class="sheet" id="sheet">
+  <div class="inner">
+    <button class="back" id="back" type="button">← К таблице</button>
+    <h2 id="stitle"></h2>
+    <div class="sub" id="ssub"></div>
+    <div class="kv" id="skv"></div>
+  </div>
+</section>
+<script>
+(function(){
+  const COLS = [
+    ["pacient","пациент"],["pol","пол"],["god","год"],["ishod","исход"],["otdelenie","отделение"],
+    ["zhitelstvo","жительство"],["vozrast","возраст"],["charlson","Индекс коморбидности Чарльсона"],
+    ["gr_krovi","гр.крови"],["diagnoz","Диагноз"],["oslozh_osnovnogo","ослож. основного"],
+    ["operirovan","оперирован"],["vremya_do_postupleniya","время до поступления"],["vremya_do_operacii","время до операции"],
+    ["operaciya","операция"],["operaciya_detali","операция (детали)"],["oslozhnenie","осложнение"],
+    ["korrekciya","коррекция"],["mikrob","микроб"],["razmery","размеры"],
+    ["asa","ASA"],["qsofa","qSOFA"],["sofa","SOFA"],["pulp","PULP"],["boey","BOEY"],
+    ["fgds_do","ФГДС до"],["prichina_smerti","Причина смерти"],["fgds_data","ФГДС (дата)"],["fgds_opisanie","ФГДС (описание)"]
+  ];
+  const FORBIDDEN = new Set(["fio","фамилия","имя","отчество","data_rozhdeniya"]);
+  const tg = window.Telegram && window.Telegram.WebApp;
+  try { tg && tg.ready(); tg && tg.expand && tg.expand(); } catch(e){}
+  const DATA_URL = "https://ervrvev.app.n8n.cloud/webhook/medr-registry";
+  const initData = (tg && tg.initData) || "";
+  let rows = [];
+
+  function clean(row){
+    const o = {};
+    for (const [k,v] of Object.entries(row||{})){
+      if (FORBIDDEN.has(k) || String(k).toLowerCase().includes("fio")) continue;
+      o[k]=v;
+    }
+    return o;
+  }
+  function val(row, key){
+    const v = row[key];
+    if (v==null || v==="") return "";
+    if (key==="ishod") return String(v)==="0" ? "умер" : String(v)==="1" ? "1" : String(v);
+    if (key==="operirovan") return String(v)==="1" ? "да" : String(v)==="0" ? "нет" : String(v);
+    return String(v);
+  }
+  function render(list){
+    const q = (document.getElementById("q").value||"").trim().toLowerCase();
+    const filtered = !q ? list : list.filter(r => String(r.pacient||"").toLowerCase().includes(q));
+    document.getElementById("meta").textContent = filtered.length + " из " + list.length + " записей";
+    const head = document.getElementById("head");
+    head.innerHTML = COLS.map((c,i)=>`<th${i===0?' class="sticky"':''}>${c[1]}</th>`).join("");
+    const body = document.getElementById("body");
+    body.innerHTML = filtered.map((r,idx)=>{
+      return `<tr data-i="${idx}" data-code="${String(r.pacient||"").replace(/"/g,'&quot;')}">`+
+        COLS.map((c,i)=>{
+          const t = val(r,c[0]).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+          return `<td${i===0?' class="sticky"':''} title="${t}">${t||"·"}</td>`;
+        }).join("")+`</tr>`;
+    }).join("");
+    body.querySelectorAll("tr").forEach(tr=>{
+      tr.addEventListener("click", ()=>{
+        const code = tr.getAttribute("data-code");
+        const row = filtered.find(x=>String(x.pacient||"")===code) || filtered[+tr.dataset.i];
+        openSheet(row);
+      });
+    });
+    document.getElementById("status").hidden = true;
+    document.getElementById("wrap").hidden = false;
+    if (!filtered.length) {
+      document.getElementById("status").hidden = false;
+      document.getElementById("status").textContent = q ? "Нет записей с таким кодом пациента." : "В реестре пока нет строк.";
+      document.getElementById("wrap").hidden = true;
+    }
+  }
+  function openSheet(row){
+    if (!row) return;
+    document.getElementById("stitle").textContent = "Пациент " + (row.pacient||"—");
+    document.getElementById("ssub").textContent = "Подробности записи";
+    document.getElementById("skv").innerHTML = COLS.map(([k,l])=>{
+      const t = val(row,k).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+      return `<div class="k">${l}</div><div class="v${t?'':' empty'}">${t||"—"}</div>`;
+    }).join("");
+    document.getElementById("sheet").classList.add("open");
+  }
+  document.getElementById("back").onclick = ()=>document.getElementById("sheet").classList.remove("open");
+  document.getElementById("q").addEventListener("input", ()=>render(rows));
+  document.getElementById("dl").onclick = async ()=>{
+    const url = new URL(DATA_URL);
+    url.searchParams.set("action","xlsx");
+    const res = await fetch(url.toString(), { headers: { "X-Telegram-Init-Data": initData }});
+    if (!res.ok) { alert("Не удалось скачать Excel"); return; }
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "Probodnye_yazvy.xlsx";
+    a.click();
+  };
+
+  async function boot(){
+    try {
+      const url = new URL(DATA_URL);
+      url.searchParams.set("action","data");
+      const res = await fetch(url.toString(), { headers: { "X-Telegram-Init-Data": initData }});
+      if (res.status===401 || res.status===403) throw new Error("Нет доступа. Откройте таблицу из меню бота.");
+      if (!res.ok) throw new Error("Не удалось загрузить реестр.");
+      const data = await res.json();
+      rows = (data.rows||[]).map(clean);
+      render(rows);
+    } catch(e){
+      document.getElementById("status").classList.add("error");
+      document.getElementById("status").textContent = e.message || String(e);
+    }
+  }
+  boot();
+})();
+</script>
+</body>
+</html>
