@@ -105,7 +105,7 @@
 <script>
 (function(){
   const COLS = [
-    ["pacient","пациент"],["pol","пол"],["god","год"],["ishod","исход"],["otdelenie","отделение"],
+    ["pacient","пациент"],["fio","ФИО"],["pol","пол"],["god","год"],["ishod","исход"],["otdelenie","отделение"],
     ["zhitelstvo","жительство"],["vozrast","возраст"],["charlson","Индекс коморбидности Чарльсона"],
     ["gr_krovi","гр.крови"],["diagnoz","Диагноз"],["oslozh_osnovnogo","ослож. основного"],
     ["operirovan","оперирован"],["vremya_do_postupleniya","время до поступления"],["vremya_do_operacii","время до операции"],
@@ -114,17 +114,17 @@
     ["asa","ASA"],["qsofa","qSOFA"],["sofa","SOFA"],["pulp","PULP"],["boey","BOEY"],
     ["fgds_do","ФГДС до"],["prichina_smerti","Причина смерти"],["fgds_data","ФГДС (дата)"],["fgds_opisanie","ФГДС (описание)"]
   ];
-  const FORBIDDEN = new Set(["fio","фамилия","имя","отчество","data_rozhdeniya"]);
+  const FORBIDDEN = new Set(["data_rozhdeniya","фамилия","имя","отчество"]);
   const tg = window.Telegram && window.Telegram.WebApp;
   try { tg && tg.ready(); tg && tg.expand && tg.expand(); } catch(e){}
-  const DATA_URL = "https://ervrvev.app.n8n.cloud/webhook/medr-registry";
-  const initData = (tg && tg.initData) || "";
+  const initData = (window.MEDR_BOOT && window.MEDR_BOOT.initData) || (tg && tg.initData) || "";
+  const PREVIEW = window.MEDR_BOOT && window.MEDR_BOOT.rows;
   let rows = [];
 
   function clean(row){
     const o = {};
     for (const [k,v] of Object.entries(row||{})){
-      if (FORBIDDEN.has(k) || String(k).toLowerCase().includes("fio")) continue;
+      if (FORBIDDEN.has(k)) continue;
       o[k]=v;
     }
     return o;
@@ -138,7 +138,7 @@
   }
   function render(list){
     const q = (document.getElementById("q").value||"").trim().toLowerCase();
-    const filtered = !q ? list : list.filter(r => String(r.pacient||"").toLowerCase().includes(q));
+    const filtered = !q ? list : list.filter(r => (String(r.pacient||"")+" "+String(r.fio||"")).toLowerCase().includes(q));
     document.getElementById("meta").textContent = filtered.length + " из " + list.length + " записей";
     const head = document.getElementById("head");
     head.innerHTML = COLS.map((c,i)=>`<th${i===0?' class="sticky"':''}>${c[1]}</th>`).join("");
@@ -178,7 +178,8 @@
   document.getElementById("back").onclick = ()=>document.getElementById("sheet").classList.remove("open");
   document.getElementById("q").addEventListener("input", ()=>render(rows));
   document.getElementById("dl").onclick = async ()=>{
-    const url = new URL(DATA_URL);
+    if (PREVIEW) { alert("В предпросмотре выгрузка отключена."); return; }
+    const url = new URL(location.href);
     url.searchParams.set("action","xlsx");
     const res = await fetch(url.toString(), { headers: { "X-Telegram-Init-Data": initData }});
     if (!res.ok) { alert("Не удалось скачать Excel"); return; }
@@ -190,8 +191,9 @@
   };
 
   async function boot(){
+    if (PREVIEW) { rows = PREVIEW.map(clean); render(rows); return; }
     try {
-      const url = new URL(DATA_URL);
+      const url = new URL(location.href);
       url.searchParams.set("action","data");
       const res = await fetch(url.toString(), { headers: { "X-Telegram-Init-Data": initData }});
       if (res.status===401 || res.status===403) throw new Error("Нет доступа. Откройте таблицу из меню бота.");
